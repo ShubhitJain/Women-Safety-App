@@ -3,7 +3,6 @@ package com.shubhit.womensafetyapp
 import android.Manifest
 import android.app.AlertDialog
 import android.content.ContentValues
-import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -19,8 +18,9 @@ import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.MediaStore
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.telephony.SmsManager
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -29,8 +29,8 @@ import com.google.firebase.storage.FirebaseStorage
 import com.shubhit.womensafetyapp.databinding.ActivityMainBinding
 import com.shubhit.womensafetyapp.utills.BatteryReceiver
 import com.shubhit.womensafetyapp.utills.LocationUtills
-import com.shubhit.womensafetyapp.utills.LocationUtills.getLastKnownLocation
 import com.shubhit.womensafetyapp.utills.Preferences
+import com.shubhit.womensafetyapp.utills.VoiceCommandManager
 import java.io.File
 import java.io.IOException
 
@@ -47,49 +47,65 @@ class MainActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private lateinit var batteryReceiver: BatteryReceiver
+    private var isVoiceRecognitionActive = false
+    private lateinit var voiceCommandManager: VoiceCommandManager
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         val contactList = Preferences.emergencyContacts
+        voiceCommandManager = VoiceCommandManager(
+            context = this,
+            onCommandReceived = { command ->
+                handleVoiceCommand(command)
+            },
+            stopBlinking = {
+                stopVoiceRecognition()
+            }
 
-
+        )
+        val speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer.setRecognitionListener(voiceCommandManager)
         val lowBatteryAlert: () -> Unit = {
             sendLowBatteryAlert()
         }
-
         batteryReceiver = BatteryReceiver(this, lowBatteryAlert)
         val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(batteryReceiver, intentFilter)
 
-        binding.emrgencyContact.btnI.setImageResource(R.drawable.emer)
-        binding.emrgencyContact.btnT.setText("Emergency Contacts")
+        setupButtons()
+        setupClickListeners()
 
-        binding.policeCon.btnI.setImageResource(R.drawable.pol)
-        binding.policeCon.btnT.text = "Police Contact"
+        binding.voiceCommondBtn.imageBtnCointainer.setOnClickListener {
+            if (!isVoiceRecognitionActive) {
+                startVoiceRecognition(speechRecognizer)
+            }
+        }
+    }
 
-        binding.sosBtn.btnI.setImageResource(R.drawable.sos)
-        binding.sosBtn.btnT.text = "SOS"
-
-        binding.liveTracking.btnI.setImageResource(R.drawable.liveloc)
-        binding.liveTracking.btnT.text = "Live Tracking"
-
-        binding.recordAudio.btnI.setImageResource(R.drawable.audio)
-        binding.recordAudio.btnT.text = "Voice Recording"
-
-        binding.recordVideo.btnI.setImageResource(R.drawable.video)
-        binding.recordVideo.btnT.text = "Video Recording"
+    private fun startVoiceRecognition(speechRecognizer: SpeechRecognizer?) {
+        isVoiceRecognitionActive = true
+        disableAllButtons(true)
 
 
-        binding.panicMode.btnI.setImageResource(R.drawable.panic)
-        binding.panicMode.btnT.text = "Panic Mode"
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+        )
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now")
+        speechRecognizer!!.startListening(intent)
+    }
 
-        binding.logOutBtn.btnI.setImageResource(R.drawable.logout)
-        binding.logOutBtn.btnT.text = "Logout"
+    private fun stopVoiceRecognition() {
+        isVoiceRecognitionActive = false
+        disableAllButtons(false)
+    }
 
 
-
+    private fun setupClickListeners() {
         binding.policeCon.imageBtnCointainer.setOnClickListener {
             val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:110"))
             if (ContextCompat.checkSelfPermission(
@@ -159,7 +175,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.logOutBtn.imageBtnCointainer.setOnClickListener{
+        binding.logOutBtn.imageBtnCointainer.setOnClickListener {
 
             // Navigate to AuthScreen
             val intent = Intent(this, AuthActivity::class.java)
@@ -170,6 +186,88 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show()
 
         }
+
+    }
+
+    private fun setupButtons() {
+        binding.emrgencyContact.btnI.setImageResource(R.drawable.emer)
+        binding.emrgencyContact.btnT.setText("Emergency Contacts")
+
+        binding.policeCon.btnI.setImageResource(R.drawable.pol)
+        binding.policeCon.btnT.text = "Police Contact"
+
+        binding.sosBtn.btnI.setImageResource(R.drawable.sos)
+        binding.sosBtn.btnT.text = "SOS"
+
+        binding.liveTracking.btnI.setImageResource(R.drawable.liveloc)
+        binding.liveTracking.btnT.text = "Live Tracking"
+
+        binding.recordAudio.btnI.setImageResource(R.drawable.audio)
+        binding.recordAudio.btnT.text = "Voice Recording"
+
+        binding.recordVideo.btnI.setImageResource(R.drawable.video)
+        binding.recordVideo.btnT.text = "Video Recording"
+
+
+        binding.panicMode.btnI.setImageResource(R.drawable.panic)
+        binding.panicMode.btnT.text = "Panic Mode"
+
+        binding.voiceCommondBtn.btnI.setImageResource(R.drawable.voicereco)
+        binding.voiceCommondBtn.btnT.text = "Voice Recognition"
+
+        binding.logOutBtn.btnI.setImageResource(R.drawable.logout)
+        binding.logOutBtn.btnT.text = "Logout"
+
+
+    }
+
+    private fun disableAllButtons(disable: Boolean) {
+        val buttons = listOf(
+            binding.emrgencyContact.imageBtnCointainer,
+            binding.policeCon.imageBtnCointainer,
+            binding.sosBtn.imageBtnCointainer,
+            binding.liveTracking.imageBtnCointainer,
+            binding.recordAudio.imageBtnCointainer,
+            binding.recordVideo.imageBtnCointainer,
+            binding.panicMode.imageBtnCointainer,
+            binding.logOutBtn.imageBtnCointainer
+        )
+        buttons.forEach { it.isEnabled = !disable }
+    }
+
+
+    private fun handleVoiceCommand(command: String) {
+        stopVoiceRecognition()
+        when {
+            command.contains("start recording", ignoreCase = true) -> {
+                // Start audio recording
+                startAudioRecording()
+
+            }
+
+            command.contains("send SOS", ignoreCase = true) -> {
+                // Send SOS message
+                sendSosMessage()
+            }
+
+            command.contains("share location", ignoreCase = true) -> {
+                // Share location
+                startLiveTracking(1 * 60 * 1000)
+
+            }
+
+            command.contains("panic mode", ignoreCase = true) -> {
+                // Share location
+                startPanicMode()
+
+            }
+
+
+            else -> {
+                Toast.makeText(this, "Unknown command", Toast.LENGTH_SHORT).show()
+            }
+        }
+
 
     }
 
@@ -226,7 +324,8 @@ class MainActivity : AppCompatActivity() {
     private fun uploadAudioFileAndSendLink() {
         uploadFile(audioFile) { audioFileUrl ->
             if (audioFileUrl != null) {
-                val message = "Please help me, I am in trouble. Here is the audio recording: $audioFileUrl"
+                val message =
+                    "Please help me, I am in trouble. Here is the audio recording: $audioFileUrl"
                 sendSmsToEmergencyContacts(message)
             } else {
                 Toast.makeText(this, "Failed to upload audio file", Toast.LENGTH_SHORT).show()
@@ -265,12 +364,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun startBeepingAndVibrating() {
         val toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 10000) // Beep for 10 seconds
+        toneGenerator.startTone(
+            ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD,
+            10000
+        ) // Beep for 10 seconds
 
         // Code to start vibration
         val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(10000, VibrationEffect.DEFAULT_AMPLITUDE)) // Vibrate for 10 seconds
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    10000,
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
+            ) // Vibrate for 10 seconds
         } else {
             vibrator.vibrate(10000) // Vibrate for 10 seconds
         }
@@ -298,7 +405,11 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 3)
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                3
+            )
             return
         }
 
@@ -451,11 +562,18 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VIDEO_CAPTURE_REQUEST_CODE && resultCode == RESULT_OK) {
-            Toast.makeText(this, "Video recording saved to: $videoUri", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Video recording saved to: $videoUri", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
     companion object {
         const val VIDEO_CAPTURE_REQUEST_CODE = 1001
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopVoiceRecognition()
+
     }
 }
