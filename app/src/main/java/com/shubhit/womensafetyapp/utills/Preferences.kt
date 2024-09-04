@@ -81,6 +81,10 @@ object Preferences {
             Gson().toJson(it)
         })
 
+    var isLowBatteryAlertSent: Boolean
+        get() = Key.LOW_BATTERY_ALERT_SENT.getBoolean()
+        set(value) = Key.LOW_BATTERY_ALERT_SENT.setBoolean(value)
+
 
 
 
@@ -99,7 +103,8 @@ object Preferences {
         STATE,
         DISTRICT,
         EMERGENCY_CONTACTS,
-        ADDRESS_OBJECT;
+        ADDRESS_OBJECT,
+        LOW_BATTERY_ALERT_SENT;
 
         fun getInt(): Int? =
             if (sharedPreferences!!.contains(name)) sharedPreferences!!.getInt(name, 0) else null
@@ -113,6 +118,11 @@ object Preferences {
                 ""
             ) else null
 
+        fun getBoolean(): Boolean =
+            sharedPreferences!!.contains(name) && sharedPreferences!!.getBoolean(name, false)
+
+        fun setBoolean(value: Boolean) =
+            sharedPreferences!!.edit { putBoolean(name, value) }
 
         fun setInt(value: Int?) =
             value?.let { sharedPreferences!!.edit { putInt(name, value) } } ?: remove()

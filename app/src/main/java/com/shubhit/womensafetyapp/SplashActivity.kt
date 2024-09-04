@@ -23,46 +23,89 @@ class SplashActivity : AppCompatActivity() {
     private lateinit var shakeDetector: ShakeDetector
     lateinit var binding: ActivitySplashBinding
 
+    companion object {
+        private const val PERMISSION_REQUEST_CODE = 100
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
         Preferences.setup(this)
 
-        val userId = Preferences.userId
-
-
-        // Initialize location client
+        // Initialize sensor manager and shake detector
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         shakeDetector = ShakeDetector {
             checkSmsPermissionAndSendHelpMessage()
         }
 
-        LocationUtills.requestLocationPermission(this)
+        // Check and request permissions
+        checkAndRequestPermissions()
+
+        val userId = Preferences.userId
+        if (userId != null) {
+            binding.getStartedButton.text = "Get Started"
+        }
+
+        binding.getStartedButton.setOnClickListener {
+            if (userId != null) {
+                startActivity(Intent(this, MainActivity::class.java))
+            } else {
+                startActivity(Intent(this, AuthActivity::class.java))
+            }
+            finish()
+        }
+    }
+
+    private fun checkAndRequestPermissions() {
+        val permissionsNeeded = mutableListOf<String>()
+
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.SEND_SMS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsNeeded.add(Manifest.permission.SEND_SMS)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsNeeded.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsNeeded.add(Manifest.permission.CAMERA)
+        }
+
+        if (permissionsNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsNeeded.toTypedArray(),
+                PERMISSION_REQUEST_CODE
+            )
+        } else {
+            initializeAppFeatures()
+        }
+    }
+
+    private fun initializeAppFeatures() {
         LocationUtills.getLastKnownLocation(this) { location ->
             location?.let {
                 val address = LocationUtills.getAddressFromLocation(this, it)
                 Preferences.addressObject = address
             }
-        }
-
-        if (userId != null) {
-            binding.getStartedButton.text = "Get Started"
-        }
-
-
-        binding.getStartedButton.setOnClickListener {
-            if (userId != null) {
-                val intent = Intent(this, MainActivity::class.java)
-                startActivity(intent)
-                finish()
-            } else {
-                val intent = Intent(this, AuthActivity::class.java)
-                startActivity(intent)
-                finish()
-
-            }
-
         }
     }
 
@@ -70,15 +113,11 @@ class SplashActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.SEND_SMS
-            ) != PackageManager.PERMISSION_GRANTED
+            ) == PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.SEND_SMS),
-                SEND_SMS_PERMISSION_REQUEST_CODE
-            )
-        } else {
             sendHelpMessage()
+        } else {
+            Toast.makeText(this, "SMS permission not granted", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -88,25 +127,18 @@ class SplashActivity : AppCompatActivity() {
                 val message =
                     "I need help! My location is: https://maps.google.com/?q=${location.latitude},${location.longitude}"
 
-                // Get emergency contacts
                 val emergencyContacts = Preferences.emergencyContacts!!
-
-                // Send SMS to each contact
                 val smsManager = SmsManager.getDefault()
+
                 for (contact in emergencyContacts) {
                     smsManager.sendTextMessage(contact.number, null, message, null, null)
                 }
                 Toast.makeText(this, "Help message sent!", Toast.LENGTH_SHORT).show()
-
-
             } else {
                 Toast.makeText(this, "Unable to fetch location", Toast.LENGTH_SHORT).show()
             }
         }
-
-
     }
-
 
     override fun onResume() {
         super.onResume()
@@ -119,10 +151,6 @@ class SplashActivity : AppCompatActivity() {
         sensorManager.unregisterListener(shakeDetector)
     }
 
-    companion object {
-        private const val SEND_SMS_PERMISSION_REQUEST_CODE = 123
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -130,25 +158,15 @@ class SplashActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            SEND_SMS_PERMISSION_REQUEST_CODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    sendHelpMessage()
+            PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                    initializeAppFeatures()
                 } else {
-                    Toast.makeText(this, "SMS permission denied", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            1 -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    LocationUtills.getLastKnownLocation(this) { location ->
-                        location?.let {
-                            val address = LocationUtills.getAddressFromLocation(this, it)
-                            Preferences.addressObject = address
-                        }
-
-                    }
-                } else {
-                    Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this,
+                        "All permissions are required for the app to function correctly",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }

@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -26,7 +27,9 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.storage.FirebaseStorage
 import com.shubhit.womensafetyapp.databinding.ActivityMainBinding
+import com.shubhit.womensafetyapp.utills.BatteryReceiver
 import com.shubhit.womensafetyapp.utills.LocationUtills
+import com.shubhit.womensafetyapp.utills.LocationUtills.getLastKnownLocation
 import com.shubhit.womensafetyapp.utills.Preferences
 import java.io.File
 import java.io.IOException
@@ -43,12 +46,22 @@ class MainActivity : AppCompatActivity() {
     private var isPanicModeActive = false
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private lateinit var batteryReceiver: BatteryReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         val contactList = Preferences.emergencyContacts
+
+
+        val lowBatteryAlert: () -> Unit = {
+            sendLowBatteryAlert()
+        }
+
+        batteryReceiver = BatteryReceiver(this, lowBatteryAlert)
+        val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        registerReceiver(batteryReceiver, intentFilter)
 
         binding.emrgencyContact.btnI.setImageResource(R.drawable.emer)
         binding.emrgencyContact.btnT.setText("Emergency Contacts")
@@ -158,6 +171,18 @@ class MainActivity : AppCompatActivity() {
 
         }
 
+    }
+
+    private fun sendLowBatteryAlert() {
+        LocationUtills.getLastKnownLocation(this) { location ->
+            if (location != null) {
+                val locationMessage =
+                    "https://maps.google.com/?q=${location.latitude},${location.longitude}"
+                sendSmsToEmergencyContacts("My Battery is too low. My last location is: $locationMessage")
+            } else {
+                Toast.makeText(this, "Unable to fetch location", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun stopPanicMode() {
